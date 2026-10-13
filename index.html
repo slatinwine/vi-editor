@@ -280,7 +280,7 @@ function download(blob,name){const a=document.createElement('a');a.href=URL.crea
 const safeName=s=>(s||'未命名工程').replace(/[\\/:*?"<>|\s]+/g,'_').slice(0,60);
 
 /* ================= 类型与节点注册表 ================= */
-const T={num:{c:'#b3742d',n:'数值'},bool:{c:'#5f8a4b',n:'布尔'},str:{c:'#b05a7e',n:'字符串'}};
+const T={num:{c:'#b3742d',n:'数值'},bool:{c:'#5f8a4b',n:'布尔'},str:{c:'#b05a7e',n:'字符串'},any:{c:'#57544d',n:'数据'}};
 const KINDS={
   numCtl :{cat:'ctl',ins:[],outs:[['数值','num']],label:'数值控件'},
   boolCtl:{cat:'ctl',ins:[],outs:[['值','bool']],label:'布尔控件'},
@@ -371,6 +371,7 @@ function serialize(){return JSON.stringify({name:state.name,meta:state.meta,node
 function applyDoc(str){const o=JSON.parse(str);
   state.name=o.name;state.meta=o.meta||{source:'new'};state.nodes=o.nodes||[];state.wires=o.wires||[];state.seq=o.seq||1;
   state.nodes.forEach(n=>{delete n._val;delete n._flash;});
+  lvFixKinds();
   selection.nodes.clear();selection.wires.clear();selDirty=true;}
 function snapshot(){undoStack.push(serialize());if(undoStack.length>100)undoStack.shift();redoStack.length=0;updateUndoBtns();}
 function undo(){if(!undoStack.length)return;redoStack.push(serialize());applyDoc(undoStack.pop());updateUndoBtns();render();renderPanel();}
@@ -952,7 +953,7 @@ function parseVi(buf,name){
     if(c2!=='LBVW'&&c2!=='ResC'&&c2!=='Doug'){
       const v=[u8[last+12],u8[last+13],u8[last+14]].map(bcd);
       if(v[0]>=4&&v[0]<=30){res.version=v.join('.');res.versionSrc='头部 BCD';}}}
-  const dirAt=last+32,blkAt=last+52;
+  const dirAt=last+32,blkAt=last+52,bio=u32(dirAt+12);
   const secsAgg=[];
   try{
     if(u32(dirAt+8)!==32)throw new Error('目录校验字不符');
@@ -963,7 +964,7 @@ function parseVi(buf,name){
       if(p+12>u8.length)break;
       const code=rd4(p),count=u32(p+4),off=u32(p+8);
       if(!/^[\x20-\x7e]{4}$/.test(code)||count>65535)continue;
-      const sa=blkAt+4+off;
+      const sa=last+bio+off;
       if(sa<blkAt||sa+count*20>u8.length)continue;
       const decs=[];let heapFmt='';
       for(let i=0;i<=count;i++){
@@ -1037,19 +1038,268 @@ function showViImport(res){
       n.props.text=lines.join('\n');n.label=res.name;
       render();renderPanel();toast('已将 VI 提取结果写入注记节点');}}]});}
 
+const LV_OF={"1":"_activeDiag","2":"_activeMarker","3":"_activePlot","4":"_activeThumb","5":"_activeXScale","6":"_activeYScale","7":"_alarmName","8":"_bary","9":"_bgColor","10":"_bindings","11":"_blinkList","12":"_borderColor","13":"_botOrRight","14":"_bounds","15":"_buf","16":"_callOffset","17":"_callType","18":"_callee","19":"_caller","20":"_callerGlyphBounds","21":"_caseSelDCO","22":"_cboxDsOffset","23":"_cboxTdOffset","24":"_cbrIcon","25":"_cinPath","26":"_className","27":"_clumpNum","28":"_cnst","29":"_code","30":"_color","31":"_colorDSO","32":"_colorTDO","33":"_cols","34":"_commentMode","35":"_companionDiag","36":"_conId","37":"_conNum","38":"_conPane","39":"_confState","40":"_configNode","41":"_connectorTM","42":"_cons","43":"_contRect","44":"_ctlDataObj","45":"_dBounds","46":"_dIdx","47":"_dataNodeList","48":"_dco","49":"_dcoAgg","50":"_dcoFiller","51":"_dcoList","52":"_ddo","53":"_ddoIndex","54":"_ddoList","55":"_ddoListList","56":"_defaultDiag","57":"_delDCO","58":"_depth","59":"_description","60":"_diagDefined","61":"_diagFiller1","62":"_diagFiller2","63":"_diagramList","64":"_docBounds","65":"_dsOffset","66":"_dsw","67":"_dynBounds","68":"_dynLink","69":"_eOracleIdx","70":"_ePtrOff","71":"_eSizeOff","72":"_eltDCO","73":"_embedToken","74":"_errCode","75":"_errIn","76":"_errOfst","77":"_errOut","78":"_eventObj_unused","79":"_fName","80":"_fgColor","81":"_filler","82":"_filterNodeList","83":"_firstNodeIdx","84":"_focusRow","85":"_format","86":"_formula","87":"_frontRow","88":"_funcTD","89":"_graphCursor","90":"_graphType","91":"_growAreaBounds","92":"_growObj","93":"_growTermsList","94":"_growViewObj","95":"_hFlags","96":"_hGrowNodeList","97":"_hSEnd","98":"_hSStart","99":"_headerImage","100":"_hierarchyColor","101":"_histDSOffset","102":"_histTD","103":"_histTDOffset","104":"_hoodBounds","105":"_hotPoint","106":"_howGrow","107":"_i","108":"_iconBounds","109":"_id","110":"_image","111":"_inArrDCO","112":"_inVILib","113":"_index","114":"_indexPosCol","115":"_indexPosRow","116":"_indexing","117":"_innerLpTunDCO","118":"_innerR","119":"_innerSeq","120":"_inplace","121":"_instance","122":"_instanceSelector","123":"_instrStyle","124":"_intermediateList","125":"_invokeFlags","126":"_keyMappingList","127":"_label","128":"_lastSignalKind","129":"_legendLbl","130":"_lenDCO","131":"_lengthDCOList","132":"_level","133":"_libPath","134":"_listFlags","135":"_listboxFlags","136":"_loopEndDCO","137":"_loopIndexDCO","138":"_loopTimingDCO","139":"_lpTunDCO","140":"_lsrDCOList","141":"_mJasterWizard","142":"_mask","143":"_master_unused","144":"_masterPart","145":"_mate","146":"_maxPaneSize","147":"_maxPanelSize","148":"_mclFlags","149":"_menuInstanceUsed","150":"_methCode","151":"_methName","152":"_minPaneSize","153":"_minPanelSize","154":"_nChunks","155":"_nConnections","156":"_nDims","157":"_nInputs","158":"_nLabels","159":"_nMajDivs","160":"_nRC","161":"_nVisItems","162":"_nmxFiller","163":"_nodeInfo","164":"_nodeList","165":"_nodeName","166":"_numFrozenCols","167":"_numFrozenRows","168":"_numRows","169":"_numSubVIs","170":"_oMId","171":"_oRC","172":"_objFlags","173":"_omidDSOffset","174":"_omidTDOffset","175":"_omidTypeDesc","176":"_orderList","177":"_origin","178":"_otherSide","179":"_outerR","180":"_outputDCO","181":"_outputNode","182":"_ownerSignal","183":"_pBounds","184":"_pMap","185":"_pMapOfst","186":"_pageList","187":"_paneFlags","188":"_paneHierarchy","189":"_paramIdx","190":"_paramTableOffset","191":"_parmIndex","192":"_partID","193":"_partOrder","194":"_partsList","195":"_pattern","196":"_pctTransparent","197":"_permDCOList","198":"_permutation","199":"_pixmap","200":"_pos","201":"_preferredInstIndex","202":"_primIndex","203":"_primResID","204":"_priv","205":"_privDataList","206":"_propList","207":"_refList","208":"_resetJumpLabel","209":"_revisionInfoCreator","210":"_revisionInfoTlkitID","211":"_revisionInfoTlkitVersion","212":"_ringDsOffset","213":"_ringTdOffset","214":"_root","215":"_rowHeight","216":"_rsrDCO","217":"_rsrcID","218":"_rtPopupData","219":"_rtPopupString","220":"_rtPopupVersion","221":"_rtdsoff","222":"_savedState","223":"_screenRes","224":"_scriptName","225":"_sdllName","226":"_selLabData","227":"_selString","228":"_selectionColor","229":"_seqLocDCOList","230":"_sequenceList","231":"_shortCount","232":"_signalIndex","233":"_signalList","234":"_simDiagFlags","235":"_simparam","236":"_simtype","237":"_simulationDiag","238":"_sizeRect","239":"_slaveList_unused","240":"_slocFiller","241":"_snFiller","242":"_splitterFlags","243":"_srDCOList","244":"_srcDCO","245":"_stamp","246":"_state","247":"_stateTD","248":"_streamData","249":"_strings","250":"_structColor","251":"_subPanelFlags","252":"_subVIGlyphBounds","253":"_symmetry","254":"_tInset","255":"_tabWidth","256":"_table","257":"_tableFlags","258":"_tagDevice","259":"_tagDisplayFilter","260":"_tagSubTypeClass","261":"_tagType","262":"_tagTypeClass","263":"_tblOffset","264":"_tdOffset","265":"_termBMPs","266":"_termBounds","267":"_termHotPoint","268":"_termList","269":"_textDivider","270":"_textRec","271":"_threadInfo","272":"_timeDataNodeDMux","273":"_timeDataNodeMux","274":"_timeLoop","275":"_timeOutDCO","276":"_tool","277":"_topOrLeft","278":"_treeFlags","279":"_tsH","280":"_tunnelList","281":"_type","282":"_typeCode","283":"_typeDesc","284":"_userDiagram","285":"_vTblPtr","286":"_varTypeDesc","287":"_vblName","288":"_version","289":"_viPath","290":"_viState","291":"_visClust","292":"_width","293":"_winFlags","294":"_wireGlyphID","295":"_wireID","296":"_wireTable","297":"_wizData","298":"_wizDataH","299":"_wizDataID","300":"_wizID","301":"_wizVersion","302":"_xflags","303":"_zPlaneList","304":"_zPlaneListList","305":"_zoom","306":"_srcDCO1","307":"_srcDCO2","308":"_srcDCO3","309":"_srcDCO4","310":"_cRectAbove","311":"_cRectBelow","312":"_variantIndex","313":"_termListLength","314":"_refListLength","315":"_hGrowNodeListLength","316":"_dataTypeDesc","317":"_hair","318":"_displayName","319":"_selLabFlags","320":"_lastSelRow","321":"_lastSelCol","322":"_scrollPosV","323":"_scrollPosH","324":"_totalBounds","325":"_srcRect","326":"_labelPosRow","327":"_labelPosCol","328":"_simparamOut","329":"_innerMate","330":"_outerMate","331":"_flatSeq","332":"_timeSeq","333":"_slaveMods","334":"_slaveOwner","335":"_simConfigNode","336":"_simOutputNode","337":"_glyphs","338":"_pUseStoredSize","339":"_pUseStoredPos","340":"_pRuntimeType","341":"_pRuntimeTop","342":"_pRuntimeLeft","343":"_pRuntimeWidth","344":"_pRuntimeHeight","345":"_pRuntimeMonitor","346":"_libVersion","347":"_ratio","348":"_annexDDOFlag","349":"_xCtlState","350":"_wizList","351":"_lockedObjectList","352":"_lockedSignalList","353":"_masterStateEnum","354":"__Quit_StateEnum","355":"_stopCodeEnum","356":"_stateLoop","357":"_stateCase","358":"_stateCaseOutputTunnel","359":"_stateList","360":"_isSubVICall","361":"_name","362":"_transitionEnum","363":"_transitionCase","364":"_transCaseOutputTunnel","365":"_transitionList","366":"_stateBounds","367":"_terminal","368":"_stateConst","369":"_exitAngle","370":"_entranceAngle","371":"_stiffness","372":"_labelPos","373":"_pinCorner","374":"_currentlyScripting","375":"_textNodeLabel","376":"_heapFlags","377":"_refreshFilter","378":"_plugInData","379":"_xTunDDO","380":"_gridFlags","381":"_headerFiles","382":"_sceneView","383":"_lastAutoScale","384":"_autoScaleDelay","385":"_reserveCB","386":"_unreserveCB","387":"_abortCB","388":"_paramInfo","389":"_extFuncFlags","390":"_tMI","391":"_lineNumbers","392":"_fPath","393":"_mDate","394":"_errHandle","395":"_xTunnelDir","396":"_sCFlag","397":"_sCStNGuid","398":"_sCDiagSubType","399":"_sCDiagFlag","400":"_isLoopCaseTransition","401":"_selectorXNode","402":"_iFeedbackLoop","403":"_cellPosRow","404":"_cellPosCol","405":"_font","406":"_mode","407":"_height","408":"_glyphIndex","409":"_flags","410":"_attributeList","411":"_qtWidget","412":"_fLoopCondTerm","413":"_isInterface","414":"_loopLimitDCO","415":"_loopTestDCO","416":"_overrideType","417":"_maxWordLength","418":"_override","419":"_overflow","420":"_quantize","421":"_tunOrdList","422":"_multiSegPipeFlange1Size","423":"_multiSegPipeFlange2Size","424":"_multiSegPipeFlange1Depth","425":"_multiSegPipeFlange2Depth","426":"_multiSegPipeWidth","427":"_staticState","428":"_funcName","429":"_mFilePath","430":"_recursiveFunc","431":"_tagDLLName","432":"_poser","433":"_dataValRefDCO","434":"_write","435":"_showTimestamp","436":"_name4","437":"_privDataDSO","438":"_privDataTMI","439":"_disabledList","451":"_tunnelLink","452":"_activeBus","453":"_terminal_ID","454":"_implementingNode","455":"_fboxlineList","456":"_compressedWireTable","457":"_sharedCloneAllocationFlags","458":"_initOrderIndex","459":"_ringSparseValues","460":"_ringDisabledIndicies","461":"_scrollbarMin","462":"_scrollbarMax","463":"_scrollbarInc","464":"_scrollbarVis","465":"_browseOptions","466":"_decomposeArraySplitNodeSplitDimension","467":"_rowHeaders","468":"_columnHeaders","469":"_activeCell","470":"_scaleDMin","471":"_scaleDMax","472":"_scaleDStart","473":"_scaleDIncr","474":"_scaleDMinInc","475":"_scaleDMultiplier","476":"_scaleDOffset","477":"_scaleRRef","478":"_scaleRngf","479":"_scaleCenter","480":"_scaleRadius","481":"_scaleRMin","482":"_scaleRMax","483":"_scaleFunIdx","484":"_scaleLoColor","485":"_scaleHiColor","486":"_scaleColorData","487":"_minDataSel","488":"_maxDataSel","489":"_pivotDataSel","490":"_absTime_min","491":"_absTime_max","492":"_absTime_inc","493":"_baseListboxItemStrings","494":"_baseListboxDoubleClickedRow","495":"_baseListboxClickedColumnHeader","496":"_baseListboxDragRow","497":"_listboxClickedCell","498":"_listboxDisabledItems","499":"_listboxGlyphColumns","500":"_treeNodeArray","501":"_treeDragIntoRow","502":"_arrayIndices","503":"_arraySelectionStart","504":"_arraySelectionEnd","505":"_comboBoxIndex","506":"_comboBoxValues","507":"_tabArrayFirstTab","508":"_tabArrayFg","509":"_tabArrayBg","510":"_tabArrayTabInfoArray","511":"_tabControlPageSelValue","512":"_tabControlPageInfoArray","513":"_StdNumMin","514":"_StdNumMax","515":"_StdNumInc","516":"_CBRExecAlias","517":"_CBRExecResolved","518":"_CBRRefPathAlias","519":"_CBRRefPath","520":"_CBRCfgMode","521":"_commentSelInfoArray","522":"_commentSelLabData","523":"_GVNGrowTerms","524":"_GVNMaxGrowTerms","525":"_GVMinGVWidth","526":"_GVHoodTermWidth","527":"_GVGrowTermsInfo","528":"_PlugInDLLName","529":"_PlugInLoadProcName","530":"_PropItemName","531":"_PropItemCode","532":"_ActiveXItemDataSize","533":"_ActiveXItemObjMgrFlags","534":"_ActiveXItemOrigVarType","535":"_ActiveXItemOrigIndex","536":"_DotNetItemDataSize","537":"_DotNetItemObjMgrFlags","538":"_DotNetItemDotNetFlags","539":"_DotNetItemType","540":"_SharedVariableCustomRule","541":"_GraphMPlot","542":"_GraphActivePlot","543":"_GraphActiveCursor","544":"_GraphCursors","545":"_GraphFlags","546":"_GraphTreeData","547":"_GraphPlotImages","548":"_GraphAnnotations","549":"_GraphActivePort","550":"_GraphCursorButtons","551":"_GraphCursorLegendData","552":"_GraphPlotLegendData","553":"_GraphMinPlotNum","554":"_GraphBusOrg","555":"_GraphScalePalette","556":"_GraphScaleData","557":"_IntensityGraphCT","558":"_IntensityGraphBMP","559":"_IntensityGraphBounds","560":"_SimDiagFeedThroughData","561":"_SimDiagSimNodeMapData","562":"_SimDiagCompNodeMapData","563":"_SimDiagSignalMapData","564":"_SimDiagAdditionalData","565":"_SelectDefaultCase","566":"_SelectNRightType","567":"_SelectRangeArray32","568":"_SelectRangeArray64","569":"_SelectStringArray","570":"_EventNodeEvents","571":"_DefaultData","572":"_ParForWorkers","573":"_ParForIndexDistribution","574":"_StateData","575":"_MinButSize","576":"_possibleMSNDCOTypes","577":"_feedbackNodeDelay","578":"_englishName","579":"_SharedVariableDynamicResID","580":"_ParForNumStaticWorkers","581":"_OMRCFlags","582":"_SimDiagSimParamData","583":"_SelectSelLabFlags","584":"_SelectSelLabData","585":"_CommentSelLabFlags","586":"_CommentSelLabData","587":"_UDClassItemDataSize","588":"_UDClassItemPropName","589":"_ConstValue","590":"_EventNodeOccurrence","591":"_EventSelLabFlags","592":"_EventSelLabData","593":"_ChunkSize","594":"_DebuggingEnabled","595":"_SlaveFBInputNode","596":"_HiddenFBNode","597":"_InnerChunkSize","598":"_savedSize","599":"_nodeFlags2","600":"_OutputInstanceNumberFromP","601":"_CBRSaveStyle","602":"_JoinCBRTimeout","603":"_OffScreenSceneView","604":"_OffScreenGLContext","605":"_scaleRMin32","606":"_scaleRMax32","607":"_TunnelType","608":"_DefaultTunnelType","609":"_FpgaImplementation","610":"_IsConditional","611":"_ConditionDCOList","612":"_LpTunConditionDCO","613":"_MSNFlags","614":"_arrayOfStringsIsCellArray","615":"_MouseWheelSupport","616":"_GraphMPlot2013","617":"_GraphBusOrg2013","618":"_attachedObject","619":"_attachment","620":"_ScaleAutoscalePadding","621":"_ThralledTunnelUID","622":"_GraphCursors2014","623":"_GraphAnnotations2014","624":"_kSLHDefaultValueMatchesCtlVI","625":"_kSLHFieldDefaultValueMatchesCtlVI","626":"_FpgaEnableBoundsMux"};
+const LV_CLS={"0":"fontRun","1":"textHair","3":"prNodeList","4":"prFrameList","5":"prVIPartList","6":"generic","7":"list","8":"dataObj","9":"cosm","10":"label","11":"multiCosm","12":"bigMultiCosm","13":"multiLabel","14":"bigMultiLabel","17":"dCO","18":"fPDCO","19":"bDConstDCO","20":"bDDCO","21":"term","22":"fPTerm","23":"signal","24":"wire","25":"hSignal","26":"hNode","27":"diag","28":"node","29":"sRN","30":"sNode","31":"growableNode","32":"forLoop","33":"whileLoop","34":"lpTun","35":"innerLpTun","36":"lCnt","37":"lTst","38":"lMax","39":"lSR","40":"rSR","41":"sequence","42":"seqTun","43":"sLoc","44":"select","45":"selTun","46":"caseSel","47":"prim","48":"parm","49":"iUse","50":"gRef","51":"iUseDCO","52":"mux","53":"mxDCO","54":"demux","55":"dmxDCO","56":"codeVI","57":"codeVIArg","58":"aBuild","59":"aBuildDCO","60":"cABuild","61":"cABuildDCO","62":"concat","63":"concatDCO","64":"decimate","65":"decimateDCO","66":"interLeave","67":"interLeaveDCO","68":"aIndx","69":"aIDCO","72":"subset","73":"subsetDCO","74":"fBox","75":"fBoxDCO","76":"supC","77":"dDO","78":"bDFixed","79":"stdBool","80":"stdNum","81":"stdString","82":"indArr","83":"stdClust","84":"stdVar","85":"stdRefNum","86":"stdColorNum","87":"stdRing","88":"stdSlide","89":"stdKnob","91":"stdPath","92":"stdTable","93":"stdHandle","94":"stdGraph","95":"stdPict","96":"stdPixMap","97":"userItem","98":"nmxDCO","99":"nMux","100":"typeDef","101":"stdRamp","102":"uCast","103":"gRefDCO","104":"annex","105":"stdListbox","106":"extFunc","107":"extFuncArg","108":"cpdArith","109":"cpdArithDCO","124":"crossList","126":"oHExt","127":"conPane","128":"loop","129":"multiDiagSNode","130":"instrTypeRec","131":"typeDesc","132":"editSelectionBkUp","133":"bHExt","134":"transTable","135":"textSelectionBkUp","136":"objInfoTable","137":"recipeBkUp","138":"recipe","139":"dataBkUp","140":"propNode","141":"propItem","142":"hGrowCItem","143":"scale","144":"scanfArg","145":"printfArg","146":"scanf","147":"printf","148":"stdTag","149":"selLabel","166":"wizardData","168":"hGrowNode","169":"invokeNode","170":"invokeItem","171":"oleVariant","172":"grouper","173":"iUseCore","174":"callByRefNode","175":"stdCont","176":"cEData","177":"subVIFromSelBkUp","178":"selListBkUp","179":"sNDCO","180":"scriptNode","181":"stdComboBox","182":"ctlRefConst","183":"ctlRefDCO","184":"stdMeasureData","185":"aReplace","186":"aRepDCO","187":"aInsert","188":"aInsDCO","189":"aDelete","190":"aDelDCO","191":"textNode","192":"exprNode","193":"cLStrObj","194":"stdLvVariant","195":"tabControl","196":"placeholderNode","197":"polyIUse","198":"polyIUseDCO","199":"page","200":"tabArray","201":"part","202":"flatSequence","203":"flatSeqTun","204":"growViewObj","205":"commentNode","206":"commentTun","207":"stdSubPanel","208":"mergeSignal","209":"mergeSignalDCO","210":"grid","211":"splitSignal","212":"splitSignalDCO","213":"eventStruct","214":"eventDataNode","215":"eventDynDCO","216":"eventTimeOut","217":"dropFeedback","218":"masterWiz","219":"subWizard","220":"stateDiagWiz","221":"state","222":"transition","223":"absTime","224":"numLabel","225":"tableControl","226":"digitalTable","227":"externalNode","228":"externalTun","229":"polySelector","230":"listbox","231":"treeControl","232":"externalSignal","233":"baseTableControl","234":"baseListbox","235":"eventRegNode","236":"eventRegItem","237":"constructorNode","238":"plugInDDO","239":"radioClust","240":"externalStructNode","241":"stubDDO","242":"graphSplitBar","243":"eventRItem","244":"eventRegCallback","245":"eventRegCBItem","246":"externalDiagram","247":"subVIFromCodeGenBkUp","248":"oldStatVIRef","249":"lTiming","250":"timeDataNode","251":"timeLoop","252":"timeLoopExtNode","253":"simDiag","254":"simNode","255":"compDiag","256":"simTun","257":"keyMapList","258":"xControl","259":"statVIRef","260":"dynIUse","261":"xNode","262":"xTunnel","263":"xStructure","264":"xDiagram","265":"xSignal","266":"dynPolyIUse","267":"dynLink","268":"udClassDDO","269":"simDCO","270":"baseRefNum","271":"privDataHelper","272":"propItemInfo","273":"axItemInfo","274":"dnetItemInfo","275":"udClassPropItemPrivInfo","276":"aInit","277":"aInitDCO","278":"aReshape","279":"aReshapeDCO","280":"sharedGrowArrayNode","281":"growArrayNode","282":"sharedGrowArrayDCO","283":"growArrayDCO","284":"pane","285":"splitter","286":"dynIUseCore","287":"timeFlatSequenceFrame","288":"xDataNode","289":"sequenceFrame","290":"timeSequence","291":"timeFlatSequence","292":"callParentDynIUse","293":"matedLpTun","294":"matedSeqTun","295":"matedLSR","296":"matedRSR","297":"scrollbar","298":"mathScriptNode","299":"mathScriptNodeDCO","300":"sdfDiag","301":"sdfNode","302":"sdfcompDiag","303":"sdfTun","304":"sdfDCO","305":"scenegraphdisplay","306":"htmlControl","307":"codeWizard","308":"cBoxDPIdx","309":"cBoxDCODPIdx","310":"abstractDiagram","311":"mathDiagram","312":"basicObj","313":"regionNode","314":"stateNode","315":"junctionNode","316":"regionTun","317":"multiSegmentPipe","318":"lDCO","319":"rDCO","320":"forkNode","321":"joinNode","322":"scDiag","323":"indArrInterface","324":"leftFeedback","325":"rightFeedback","326":"initFeedback","327":"qtCont","328":"sharedVariable","329":"sharedVariableDCO","330":"hiddenFBNode","331":"overridableParm","332":"ternaryDDO","333":"decomposeRecomposeStructure","334":"decomposeRecomposeTunnel","335":"decomposeArrayNode","336":"decomposeClusterNode","337":"decomposeVariantNode","338":"decomposeMatchNode","339":"decomposeDataValRefNode","340":"dataValRefPoserInterface","341":"decomposeDCO","342":"decomposeClusterDCO","343":"poserInterface","344":"arrayPoserInterface","345":"clusterPoserInterface","346":"variantPoserInterface","347":"matchPoserInterface","349":"mathScriptCallByRefNode","351":"FBoxLine","352":"sceneGraphDisplayPart","353":"fxpUnbundle","354":"fxpUnbundleDCO","355":"decomposeArrayNodeDCO","356":"decomposeArraySplitNode","357":"arraySplitPoserInterface","358":"decomposeArraySPlitNodeDCO","359":"genIUse","361":"parForWorkers","362":"sharedVariableDynamicOpen","363":"sharedVariableDynamicRead","364":"sharedVariableDynamicWrite","365":"sharedVariableDynamicDCO","366":"conditionalFeedbackDCO","367":"chunkSize","368":"slaveFBInputNode","369":"innerChunkSize","370":"mergeErrors","371":"mergeErrorsDCO","372":"dexChannelCreateNode","373":"dexChannelShutdownNode","374":"lpTunConditionDCO","375":"attachment","500":"ConpaneConnection","550":"ComplexScalar","551":"Time128","600":"Image","700":"KeyMappingBinding","740":"ExtFuncParam","750":"ExtFuncAdded","800":"SubCosm","900":"EmbedObject","901":"SubLabel","902":"SceneView","903":"SceneColor","904":"SceneEyePoint","905":"TableAttribute","906":"BrowseOptions","907":"StorageRowCol","908":"ColorPair","909":"TreeNode","910":"RelativeRowCol","911":"TabInfoItem","912":"PageInfoItem","913":"TreeElt","914":"ExpressionInfo","915":"SelectorInfoElement","916":"GrowTermInfo","917":"MappedPoint","918":"PlotData","919":"CursorData","920":"PlotImages","921":"CursorButtonsRec","922":"PlotLegendData","923":"DigitlaBusOrgClust","924":"ScaleLegendData","925":"ScaleData","927":"ObjNodeMapEntry","928":"ObjMapEntry","929":"EventSpec","930":"SelectorRange"};
+const LV_CLS_LISTS={"fontRun":{"0":"_textRecObject","1":"_flags","2":"_mode","3":"_text","4":"_view","5":"_bgColor","6":"_fr","7":"_curfr","8":"_fontofst","9":"_fontid","10":"_fontcolor"},"textHair":{"0":"_textRecObject","1":"_flags","2":"_mode","3":"_text","4":"_view","5":"_bgColor","6":"_fr","7":"_curfr","8":"_fontofst","9":"_fontid","10":"_fontcolor"},"Image":{"0":"_ImageResID","1":"_ImageInternalsResID","2":"_ImageData1","3":"_ImageData2","4":"_ImageData3"},"SubCosm":{"0":"_Bounds","1":"_FGColor","2":"_BGColor","3":"_Image"},"EmbedObject":{"0":"_Type","1":"_Flags"},"SceneView":{"0":"_ModelView","1":"_Projection","2":"_BackgroundColor","3":"_CameraController","4":"_AutoProjection","5":"_Zoom","6":"_EyePoint"},"SceneColor":{"0":"_red","1":"_green","2":"_blue","3":"_alpha"},"SceneEyePoint":{"0":"_eyePoint_X","1":"_eyePoint_Y","2":"_eyePoint_Z"},"ComplexScalar":{"0":"_real","1":"_imaginary"},"TableAttribute":{"403":"_cellPosRow","404":"_cellPosCol","405":"_font","406":"_mode","80":"_fgColor","9":"_bgColor","292":"_width","407":"_height","409":"_flags","408":"_glyphIndex"},"Time128":{"0":"_Seconds","1":"_FractionalSeconds"},"BrowseOptions":{"0":"_pattern","1":"_matchPattern","2":"_mode","3":"_startPath","4":"_patternLabel","5":"_buttonLabel"},"StorageRowCol":{"0":"_row","1":"_col"},"ColorPair":{"0":"_value","1":"_color"},"TreeNode":{"0":"_nodeFlags","1":"_tag","2":"_indentLevel"},"RelativeRowCol":{"0":"_row","1":"_col"},"TabInfoItem":{"0":"_itemFlags","1":"_textWidth","2":"_caption","3":"_fg","4":"_bg"},"PageInfoItem":{"0":"_itemFlags","1":"_caption","2":"_fg","3":"_bg"},"MappedPoint":{"0":"_y","1":"_x"},"PlotData":{"0":"_color","1":"_flags","2":"_interp","3":"_lineStyle","4":"_pointStyle","5":"_fillStyle","6":"_width","7":"_plotFlags","8":"_plotName","9":"_cnt","10":"_mapped","11":"_pointColor","12":"_fillColor","13":"_xScale","14":"_yScale","15":"_mBits","16":"_gtoIndex","17":"_unused","18":"_fxpWordLength","19":"_fxpIntegerLength","20":"_fxpIsSigned","21":"_fxpFracDigits","22":"_fxpStyle"},"CursorData":{"0":"_flags","1":"_plot","2":"_glyph","3":"_lineStyle","4":"_lineWidth","5":"_color","6":"_name","7":"_x","8":"_y","9":"_z","10":"_index","11":"_loc","12":"_font","13":"_mode","14":"_txSize","15":"_txOffset","16":"_active","17":"_port","18":"_xScale","19":"_yScale","20":"_watchPlots","21":"_txOffsetX","22":"_txOffsetY","23":"_loc32","24":"_txOffset32"},"PlotImages":{"0":"_plotPicBg","1":"_plotPicMg","2":"_plotPicFg"},"CursorButtonsRec":{"0":"_left","1":"_right","2":"_up","3":"_down"},"PlotLegendData":{"0":"_name","1":"_menu","2":"_visBool"},"DigitlaBusOrgClust":{"0":"_arrayHandle","1":"_isBus","2":"_pData"},"ScaleLegendData":{"0":"_name","1":"_autoScaleLock","2":"_autoScale","3":"_formatButton"},"KeyMappingBinding":{"0":"_VKey","1":"_CharCode","2":"_Mods","3":"_Obj","4":"_Action"},"ScaleData":{"0":"_partID","1":"_partOrder","2":"_flags","3":"_gridMaxColor","4":"_gridMinColor","5":"_gridMaxLineStyle","6":"_gridMinLineStyle","7":"_scaleRect","8":"_port","9":"_scaleFlavor"},"ConpaneConnection":{"0":"_ConnectionDCO","1":"_ConNum","2":"_Flags","3":"_TermRect"},"GrowTermInfo":{"0":"_flags","1":"_termOfst"},"EventSpec":{"0":"_diagramIdx","1":"_source","2":"_regFlags","3":"_eSource","4":"_type","5":"_eFlags","6":"_ddoUID","7":"_menuTag","8":"_dynIndex"},"SelectorRange":{"0":"_start","1":"_end","2":"_startRangeType","3":"_endRangeType","4":"_diagramIdx"}};
+
+/* ================= VI 堆对象树解析（BDHb/FPHb → 器件图） =================
+   依据 mefistotelis/pylabview (MIT) 逆向成果实现的 HeapVerb 二进制格式：
+   每条目 = [cmd 2B: sizeSpec|hasAttr|scope|rawTag][tagId?][属性表][内容]，
+   对象类由属性 class(-2) 标注，坐标在 bounds 族 Rect 标签下。 */
+const LV_SYS_TAGS={'-3':'object','-4':'array','-5':'reference','-6':'arrayElement','-7':'rootObject'};
+function lvU124(d,o){const v=d[o];if(v===255)return{v:((d[o+1]<<8)|d[o+2]),o:o+3};
+  if(v===254)return{v:(((d[o+1]<<24)|(d[o+2]<<16)|(d[o+3]<<8)|d[o+4])>>>0),o:o+5};return{v,o:o+1};}
+function lvS124(d,o){let v=d[o]<<24>>24;
+  if(v===-128)return{v:((d[o+1]<<8|d[o+2])<<16>>16),o:o+3};
+  if(v===-127)return{v:(((d[o+1]<<24)|(d[o+2]<<16)|(d[o+3]<<8)|d[o+4])|0),o:o+5};return{v,o:o+1};}
+function lvS24(d,o){let v=(d[o]<<8|d[o+1])<<16>>16;
+  if(v===-32768)return{v:(((d[o+2]<<24)|(d[o+3]<<16)|(d[o+4]<<8)|d[o+5])|0),o:o+6};return{v,o:o+2};}
+function lvTagName(node,parentCls){
+  const t=node.tag;
+  if(LV_SYS_TAGS[t])return LV_SYS_TAGS[t];
+  if(parentCls&&LV_CLS_LISTS[parentCls]&&LV_CLS_LISTS[parentCls][t]!==undefined)return LV_CLS_LISTS[parentCls][t].replace(/^_/,'');
+  if(LV_OF[t]!==undefined)return LV_OF[t].replace(/^_/,'');
+  return 'Tag'+t.toString(16).padStart(4,'0').toUpperCase();}
+function lvHeapTree(d){
+  if(!d||d.length<8)return null;
+  const len=((d[0]<<24)|(d[1]<<16)|(d[2]<<8)|d[3])>>>0;
+  let o=4;const end=Math.min(4+len,d.length);
+  let root=null;const stack=[];
+  let guard=0;
+  while(o+2<=end&&guard++<200000){
+    const b0=d[o],b1=d[o+1];o+=2;
+    const sizeSpec=(b0>>5)&7,hasAttr=(b0>>4)&1,scope=(b0>>2)&3,rawTag=b1|((b0&3)<<8);
+    let tagId;
+    if(rawTag===1023){if(o+4>end)break;tagId=(((d[o]<<24)|(d[o+1]<<16)|(d[o+2]<<8)|d[o+3])|0);o+=4;}
+    else tagId=rawTag-31;
+    if(scope===2){if(stack.length)stack.pop();continue;}
+    const parent=stack.length?stack[stack.length-1]:null;
+    const node={tag:tagId,cls:null,attrs:{},content:null,kids:[]};
+    if(hasAttr){
+      let r=lvU124(d,o);o=r.o;
+      for(let i=0;i<r.v&&o<d.length;i++){
+        let a=lvS124(d,o);o=a.o;
+        let b=lvS24(d,o);o=b.o;
+        if(a.v===-2)node.cls=(LV_CLS[b.v]!==undefined)?LV_CLS[b.v]:('Cls'+((b.v&0xffff).toString(16).padStart(4,'0')));
+        else node.attrs[a.v]=b.v;}}
+    if(sizeSpec===0)node.content=false;
+    else if(sizeSpec<=4){node.content=d.slice(o,o+sizeSpec);o+=sizeSpec;}
+    else if(sizeSpec===6){const r=lvU124(d,o);o=r.o;node.content=d.slice(o,o+r.v);o+=r.v;}
+    else if(sizeSpec===7)node.content=true;
+    if(o>end){break;}
+    if(parent)parent.kids.push(node);else if(!root)root=node;
+    if(scope===0)stack.push(node);}
+  return root;}
+function lvKid(n,name){if(!n)return null;
+  for(const k of n.kids){if(lvTagName(k,n.cls)===name)return k;}return null;}
+function lvKids(n,name){if(!n)return[];const out=[];
+  for(const k of n.kids){if(lvTagName(k,n.cls)===name)out.push(k);}return out;}
+function lvRect(n){if(!n||!(n.content instanceof Uint8Array)||n.content.length!==8)return null;
+  const s=n.content;
+  const i16=o=>(((s[o]<<8)|s[o+1])<<16>>16);
+  return[i16(0),i16(2),i16(4),i16(6)];}
+function lvStr(n){if(!(n.content instanceof Uint8Array))return '';
+  try{return new TextDecoder('macintosh').decode(n.content);}catch(e){
+    let s='';for(const c of n.content)s+=(c>=32&&c<127)?String.fromCharCode(c):'';return s;}}
+function lvInt(n){if(!(n.content instanceof Uint8Array)||!n.content.length)return 0;
+  let v=0;for(const c of n.content)v=(v*256+c)&0x1fffffff;return v;}
+function lvTextOf(n){ // _textRec→text 或 子label→textRec→text
+  const tr=lvKid(n,'textRec');
+  if(tr){const t=lvKid(tr,'text');if(t&&t.content instanceof Uint8Array)return lvStr(t);}
+  for(const lab of lvKids(n,'label')){
+    const tr2=lvKid(lab,'textRec');
+    if(tr2){const t=lvKid(tr2,'text');if(t&&t.content instanceof Uint8Array)return lvStr(t);}}
+  return '';}
+/* ---- 由 BD/FP 堆构建器件图文档 ---- */
+function lvBuildFromVi(res){
+  const get=name=>{const s=res.sections.find(s=>s.code===name&&s.decs.length);return s?lvHeapTree(s.decs[0].data):null;};
+  const bdRoot=get('BDHb')||get('BDHc');if(!bdRoot)return null;
+  const fpRoot=get('FPHb')||get('FPHc');
+  const nodes=[],wires=[];let seq=1;const mkId=()=>'n'+(seq++);
+  const T2G={iUse:'▤',polyIUse:'▤',sRN:'▤',prim:'ƒ',nMux:'⇉',aBuild:'⇉',mergeErrors:'⇉',
+    forLoop:'↻',whileLoop:'∞',caseStructure:'⎘',commentNode:'▦',arrayCase:'⎘',flatSeq:'⇥',
+    formulaNode:'∑',map:'ᴹ',mergeError:'⇉',dalNode:'▣'};
+  const tToUid=t=>t.attrs[-3]!==undefined?t.attrs[-3]:t.attrs['uid'];
+  /* uid attr 在 lvHeapTree 里存于 attrs[-3](SL__uid=-3) */
+  function uidOf(n){const u=n.attrs&&n.attrs[-3];return u===undefined?null:u;}
+  function buildDiag(diag,baseX,baseY,prefix){
+    const zl=lvKid(diag,'zPlaneList');if(!zl)return;
+    const zobjs=[];const termOwner={};const zbyuid={};
+    for(const el of zl.kids){
+      const r=lvRect(lvKid(el,'bounds'));const tl=lvKid(el,'termList');
+      if(!r&&!(el.cls==='label')){ /* 无 bounds 的对象(如未识别)仍可能有用 */ }
+      const terms=[];if(tl)for(const t of tl.kids){terms.push(t);const u=uidOf(t);if(u!==null)termOwner[u]=el;}
+      const u=uidOf(el);if(u!==null)zbyuid[u]=el;
+      zobjs.push({el,rect:r,terms});}
+    /* 收集每个对象被连线引用的端子方向 */
+    const sl=lvKid(diag,'signalList');
+    const useOut={},useIn={};const sigList=[];
+    if(sl)for(const sg of sl.kids){
+      const tl=lvKid(sg,'termList');if(!tl||tl.kids.length<2)continue;
+      const tuids=tl.kids.map(t=>uidOf(t));
+      if(tuids.some(u=>u===null))continue;
+      sigList.push(tuids);}
+    for(const tuids of sigList){
+      const fromU=tuids[0];
+      (useOut[fromU]=useOut[fromU]||new Set());
+      for(let j=1;j<tuids.length;j++)(useIn[tuids[j]]=useIn[tuids[j]]||new Set());}
+    /* 建节点 */
+    const nodeIdOf={};const termSlot={}; // uid → {out:i} 或 {in:i}
+    for(const zo of zobjs){
+      const el=zo.el,u=uidOf(el);
+      const r=zo.rect;
+      const isLabel=el.cls==='label'||el.cls==='selLabel';
+      if(!r&&!isLabel)continue;
+      if(isLabel&&!r){ /* 标签缺 bounds 也跳过 */ continue;}
+      const text=lvTextOf(el);
+      let kind,cat='fn',glyph=T2G[el.cls]||'▣';
+      if(isLabel){cat='note';kind='note';glyph='';}
+      else if(el.cls==='forLoop'||el.cls==='whileLoop'||el.cls==='caseStructure'||el.cls==='flatSeq'||el.cls==='commentNode'||el.cls==='arrayCase'){glyph=T2G[el.cls]||'▦';}
+      if(isLabel){
+        const w=Math.max(60,Math.min(320,(r[2]-r[0])*1.6)),h=Math.max(28,(r[3]-r[1])*1.15);
+        const n={id:mkId(),kind:'note',label:(text||'标签').slice(0,40),x:baseX+r[0],y:baseY+r[1],w,h,props:{text:text||''}};
+        nodes.push(n);if(u!==null)nodeIdOf[u]=n.id;continue;}
+      const usedOutU=[],usedInU=[];
+      for(const t of zo.terms){const tu=uidOf(t);
+        if(tu!==null&&useOut[tu])usedOutU.push(tu);
+        if(tu!==null&&useIn[tu])usedInU.push(tu);}
+      const ins=usedInU.map((_,i)=>['t'+i,'any']);
+      const outs=usedOutU.map((_,i)=>['t'+i,'any']);
+      const w=Math.max(24,r[2]-r[0]),h=Math.max(18,r[3]-r[1]);
+      const kname='lv_'+el.cls+'_'+seq;
+      KINDS[kname]={cat:'fn',ins,outs,glyph,label:el.cls.replace(/^SL__/,''),lvimp:true};
+      const n={id:mkId(),kind:kname,label:(text||el.cls.replace(/^SL__/,'')),x:baseX+r[0],y:baseY+r[1],w,h,props:{}};
+      nodes.push(n);if(u!==null)nodeIdOf[u]=n.id;
+      usedOutU.forEach((tu,i)=>termSlot[tu]={dir:'out',idx:i,node:n});
+      usedInU.forEach((tu,i)=>termSlot[tu]={dir:'in',idx:i,node:n});}
+    /* 连线(端子引用也可能直接指向对象自身 uid;缺失对象则就近建占位节点) */
+    function slotFor(tuid,wantDir){
+      if(termSlot[tuid])return termSlot[tuid];
+      const zu=zbyuid[tuid];if(zu===undefined)return null;
+      const nid=nodeIdOf[zu];if(!nid)return null;
+      let n=null;for(const x of nodes)if(x.id===nid){n=x;break;}
+      if(!n)return null;
+      const k=KINDS[n.kind];
+      const arr=wantDir==='out'?k.outs:k.ins;arr.push(['t'+arr.length,'any']);
+      const st={dir:wantDir,idx:arr.length-1,node:n};termSlot[tuid]=st;return st;}
+    function placeholder(tuid,ref){
+      const zu=zbyuid[tuid];if(zu===undefined)return null;
+      const el=zu;const text=lvTextOf(el)||(el.cls?el.cls:'常量');
+      const n={id:mkId(),kind:'lv_ph_'+seq,label:text.slice(0,24),x:ref.x+70,y:ref.y-46,w:64,h:22,props:{}};
+      KINDS[n.kind]={cat:'fn',ins:[],outs:[],glyph:'◆',label:'常量',lvimp:true};
+      nodes.push(n);
+      const u=uidOf(el);if(u!==null)nodeIdOf[u]=n.id;
+      return n;}
+    for(const tuids of sigList){
+      let f=slotFor(tuids[0],'out');
+      const rest=[];
+      for(let j=1;j<tuids.length;j++){
+        let t=slotFor(tuids[j],'in');
+        if(!t&&tuids[j]!==tuids[0]){const pn=placeholder(tuids[j],f?f.node:{x:60,y:60});
+          if(pn){const k=KINDS[pn.kind];k.ins.push(['t'+k.ins.length,'any']);
+            t={dir:'in',idx:k.ins.length-1,node:pn};termSlot[tuids[j]]=t;}}
+        if(t)rest.push(t);}
+      if(!f){
+        const pn=placeholder(tuids[0],rest.length?rest[0].node:{x:60,y:60});
+        if(pn){const k=KINDS[pn.kind];k.outs.push(['t0','any']);
+          f={dir:'out',idx:k.outs.length-1,node:pn};termSlot[tuids[0]]=f;}}
+      if(!f)continue;
+      for(const t of rest)wires.push({id:mkId(),from:f.node.id,fromTerm:f.idx,to:t.node.id,toTerm:t.idx});}
+    return {zbyuid,nodeIdOf};}
+  /* 顶层 diag */
+  let topDiag=null;
+  (function find(n){if(topDiag)return;if(n.cls==='diag'&&lvKid(n,'nodeList')!==undefined){topDiag=n;return;}
+    for(const k of n.kids)find(k);})(bdRoot);
+  if(!topDiag)return null;
+  buildDiag(topDiag,0,0,'bd');
+  /* 前面板:控件+标签 → 器件图下方 */
+  let fpCount=0;
+  if(fpRoot){
+    let minX=1e9,minY=1e9,maxX=-1e9,maxY=-1e9;const fpObjs=[];
+    (function walk(n){
+      if(n.cls&&/^(std|arr|path|cluster|enum)/.test(n.cls)){
+        const r=lvRect(lvKid(n,'bounds'));
+        if(r){const text=lvTextOf(n);fpObjs.push({n,r,text});}}
+      for(const k of n.kids)walk(k);})(fpRoot);
+    if(fpObjs.length){
+      const bdTop=nodes.length?Math.max(...nodes.map(n=>n.y+n.h)):0;
+      fpObjs.forEach((o,i)=>{
+        const w=Math.max(40,o.r[2]-o.r[0])*1.4,h=Math.max(24,o.r[3]-o.r[1])*1.4;
+        const kname='lvfp_'+(o.n.cls||'x')+'_'+i+'_'+seq;
+        KINDS[kname]={cat:'fn',ins:[],outs:[],glyph:'⬒',label:'控件',lvimp:true};
+        nodes.push({id:mkId(),kind:kname,label:(o.text||o.n.cls.replace(/^SL__/,'')).slice(0,40),
+          x:o.r[0]*1.4,y:bdTop+90+o.r[1]*1.4,w,h,props:{}});fpCount++;});}}
+  /* 汇总注记 */
+  const lines=['LabVIEW '+(res.version||'?')+' · '+(res.name||'')];
+  const bdN=nodes.length-fpCount;
+  lines.push('框图对象:'+bdN+' · 连线:'+wires.length+' · 前面板控件:'+fpCount);
+  if(res.strs&&res.strs.subvi&&res.strs.subvi.length)lines.push('子VI 引用:'+res.strs.subvi.slice(0,8).join(' , '));
+  if(nodes.length){
+    const n={id:mkId(),kind:'note',label:'VI 元数据',x:40,y:-160,w:380,h:120,
+      props:{text:lines.join('\n')}};nodes.push(n);}
+  if(!nodes.length)return null;
+  /* 归一化坐标:最小值平移到 (40,40) */
+  let mx=1e9,my=1e9;
+  for(const n of nodes){if(n.kind!=='note'||n.props.text.indexOf('LabVIEW')!==0){mx=Math.min(mx,n.x);my=Math.min(my,n.y);}}
+  if(mx<1e9)for(const n of nodes){n.x+=40-mx;n.y+=40-my;}
+  return {nodes,wires,seq,bd:bdN,fp:fpCount};}
+
+/* ---- JSON 工程往返:为导入节点重建端子槽位 ---- */
+function lvFixKinds(){
+  for(const n of state.nodes){
+    if(!KINDS[n.kind]&&/^lv/.test(n.kind))
+      KINDS[n.kind]={cat:'fn',ins:[],outs:[],glyph:'▣',label:'导入对象',lvimp:true};}
+  for(const w of state.wires){
+    const a=nodeById(w.from),b=nodeById(w.to);if(!a||!b)continue;
+    const ka=KINDS[a.kind],kb=KINDS[b.kind];
+    if(ka&&ka.lvimp)while(ka.outs.length<=w.fromTerm)ka.outs.push(['t'+ka.outs.length,'any']);
+    if(kb&&kb.lvimp)while(kb.ins.length<=w.toTerm)kb.ins.push(['t'+kb.ins.length,'any']);}}
+
+/* ---- 导入确认弹窗 ---- */
+function showViGraphImport(res,built){
+  const fsize=n=>n<1024?n+' B':n<1048576?(n/1024).toFixed(1)+' KB':(n/1048576).toFixed(2)+' MB';
+  const body=`
+   <div class="kv"><span>文件</span><b>${esc(res.name)}</b></div>
+   <div class="kv"><span>LabVIEW 版本</span><b>${esc(res.version||'?')}</b></div>
+   <div class="kv"><span>框图对象</span><b>${built.bd}</b></div>
+   <div class="kv"><span>连线</span><b>${built.wires.length}</b></div>
+   <div class="kv"><span>前面板控件</span><b>${built.fp}</b></div>
+   <p style="color:var(--ink-2);margin-top:8px">已从 .vi 二进制解析出框图对象树(BDHb 堆)。
+   节点坐标/端子取自原始布局,连线按端子位置正交布线;文本为 mac-roman 解码。
+   若显示不全,可改用「仅查看元数据」核对提取结果。</p>`;
+  showModal({title:'VI 导入 · 器件图',bodyHTML:body,buttons:[
+    {label:'仅查看元数据',fn(){showViImport(res);}},
+    {label:'导入为器件图',primary:true,fn(){
+      snapshot();
+      state.name=(res.name||'VI导入').replace(/\.vi$/i,'');
+      state.meta={source:'vi:'+res.name,labview:res.version};
+      $('#projName').value=state.name;$('#srcChip').textContent=state.meta.source;
+      state.nodes=built.nodes;state.wires=built.wires;state.seq=built.seq;
+      undoStack.length=0;redoStack.length=0;updateUndoBtns();
+      render();renderPanel();fitView();
+      toast(`已导入器件图:${built.bd} 对象 · ${built.wires.length} 连线`+(built.fp?` · ${built.fp} 控件`:''));}}]});}
+
 /* ================= 导入 / 导出 ================= */
 const fileInput=$('#fileInput');
 function openFile(file){
   const fr=new FileReader();
   fr.onload=()=>{const buf=fr.result;
     const u8=new Uint8Array(buf);
-    if(u8[0]===0x52&&u8[1]===0x53&&u8[2]===0x52&&u8[3]===0x43){showViImport(parseVi(buf,file.name));return;}
+    if(u8[0]===0x52&&u8[1]===0x53&&u8[2]===0x52&&u8[3]===0x43){
+      const res=parseVi(buf,file.name);
+      let built=null;
+      try{built=lvBuildFromVi(res);}catch(e){console.warn('VI heap import failed:',e);}
+      if(built&&built.nodes.length)showViGraphImport(res,built);
+      else showViImport(res);
+      return;}
     try{const o=JSON.parse(new TextDecoder().decode(buf));
       if(o.format!=='tong-vi-doc')throw new Error('缺少 format: "tong-vi-doc" 标识');
+      (o.nodes||[]).forEach(n=>{if(!KINDS[n.kind]&&/^lv/.test(n.kind))
+        KINDS[n.kind]={cat:'fn',ins:[],outs:[],glyph:'▣',label:'导入对象',lvimp:true};});
       let dropped=0;
       o.nodes=(o.nodes||[]).filter(n=>{if(KINDS[n.kind]){delete n._val;delete n._flash;return true;}dropped++;return false;});
       o.wires=(o.wires||[]).filter(w=>o.nodes.some(n=>n.id===w.from)&&o.nodes.some(n=>n.id===w.to));
-      snapshot();applyDoc(JSON.stringify(o));
+      snapshot();applyDoc(JSON.stringify(o));lvFixKinds();
       $('#projName').value=state.name;$('#srcChip').textContent=state.meta.source||'json';
       undoStack.length=0;redoStack.length=0;updateUndoBtns();
       render();renderPanel();fitView();
