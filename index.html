@@ -1086,6 +1086,7 @@ function lvHeapTree(d){
     else if(sizeSpec<=4){node.content=d.slice(o,o+sizeSpec);o+=sizeSpec;}
     else if(sizeSpec===6){const r=lvU124(d,o);o=r.o;node.content=d.slice(o,o+r.v);o+=r.v;}
     else if(sizeSpec===7)node.content=true;
+    else break; /* sizeSpec=5:未知长度,停止以免失步 */
     if(o>end){break;}
     if(parent)parent.kids.push(node);else if(!root)root=node;
     if(scope===0)stack.push(node);}
@@ -1099,16 +1100,25 @@ function lvRect(n){if(!n||!(n.content instanceof Uint8Array)||n.content.length!=
   const i16=o=>(((s[o]<<8)|s[o+1])<<16>>16);
   return[i16(0),i16(2),i16(4),i16(6)];}
 function lvStr(n){if(!(n.content instanceof Uint8Array))return '';
+  let hi=false;for(const c of n.content){if(c>=0x80){hi=true;break;}}
+  if(hi){try{const s=new TextDecoder('gbk',{fatal:true}).decode(n.content);
+    if(/[\u4e00-\u9fff]/.test(s))return s;}catch(e){}}
   try{return new TextDecoder('macintosh').decode(n.content);}catch(e){
     let s='';for(const c of n.content)s+=(c>=32&&c<127)?String.fromCharCode(c):'';return s;}}
 function lvInt(n){if(!(n.content instanceof Uint8Array)||!n.content.length)return 0;
   let v=0;for(const c of n.content)v=(v*256+c)&0x1fffffff;return v;}
-function lvTextOf(n){ // _textRec→text 或 子label→textRec→text
+function lvTextOf(n){ // _textRec 子树内递归找首个有效字节串(文本可能隔着一层对象)
+  const valid=b=>{const s=tryTextBytes(b);
+    return (s&&/[A-Za-z0-9\u4e00-\u9fff]/.test(s))?s:null;};
+  const findStr=node=>{
+    if(node.content instanceof Uint8Array){const s=valid(node.content);if(s)return s;}
+    for(const k of node.kids){const r=findStr(k);if(r)return r;}
+    return null;};
   const tr=lvKid(n,'textRec');
-  if(tr){const t=lvKid(tr,'text');if(t&&t.content instanceof Uint8Array)return lvStr(t);}
+  if(tr){const s=findStr(tr);if(s)return s;}
   for(const lab of lvKids(n,'label')){
     const tr2=lvKid(lab,'textRec');
-    if(tr2){const t=lvKid(tr2,'text');if(t&&t.content instanceof Uint8Array)return lvStr(t);}}
+    if(tr2){const s=findStr(tr2);if(s)return s;}}
   return '';}
 /* ---- 由 BD/FP 堆构建器件图文档 ---- */
 function lvBuildFromVi(res){
@@ -1116,35 +1126,42 @@ function lvBuildFromVi(res){
   const bdRoot=get('BDHb')||get('BDHc');if(!bdRoot)return null;
   const fpRoot=get('FPHb')||get('FPHc');
   const nodes=[],wires=[];let seq=1;const mkId=()=>'n'+(seq++);
-  const T2G={iUse:'▤',polyIUse:'▤',sRN:'▤',prim:'ƒ',nMux:'⇉',aBuild:'⇉',mergeErrors:'⇉',
-    forLoop:'↻',whileLoop:'∞',caseStructure:'⎘',commentNode:'▦',arrayCase:'⎘',flatSeq:'⇥',
-    formulaNode:'∑',map:'ᴹ',mergeError:'⇉',dalNode:'▣'};
+  const T2G={iUse:'▤',polyIUse:'▤',dynIUse:'▤',sRN:'▤',prim:'ƒ',nMux:'⇉',aBuild:'⇉',mergeErrors:'⇉',
+    forLoop:'↻',whileLoop:'∞',select:'⎘',sequence:'⇥',flatSequence:'⇥',eventStruct:'⚑',
+    commentNode:'▦',formulaNode:'∑',exprNode:'∑',map:'ᴹ',mergeError:'⇉',dalNode:'▣'};
   const tToUid=t=>t.attrs[-3]!==undefined?t.attrs[-3]:t.attrs['uid'];
   /* uid attr 在 lvHeapTree 里存于 attrs[-3](SL__uid=-3) */
   function uidOf(n){const u=n.attrs&&n.attrs[-3];return u===undefined?null:u;}
-  function buildDiag(diag,baseX,baseY,prefix){
-    const zl=lvKid(diag,'zPlaneList');if(!zl)return;
-    const zobjs=[];const termOwner={};const zbyuid={};
-    for(const el of zl.kids){
+  /* 端子槽/对象索引跨递归共享(结构内外连线要互通) */
+  const termSlot={},zbyuid={},nodeIdOf={},useOut={},useIn={};
+  /* 列表展开:递归穿透 array(-4)/arrayElement(-6) 包装 */
+  function lvListObjs(lst){const out=[];if(!lst)return out;
+    const visit=n=>{
+      if(n.tag===-4||n.tag===-6){n.kids.forEach(visit);return;}
+      if(n.cls||lvKid(n,'bounds'))out.push(n);};
+    for(const k of lst.kids)visit(k);
+    return out;}
+  function buildDiag(diag,baseX,baseY,prefix,depth){
+    const zl=lvKid(diag,'zPlaneList')||lvKid(diag,'nodeList');if(!zl)return;
+    const zobjs=[];
+    for(const el of lvListObjs(zl)){
       const r=lvRect(lvKid(el,'bounds'));const tl=lvKid(el,'termList');
-      if(!r&&!(el.cls==='label')){ /* 无 bounds 的对象(如未识别)仍可能有用 */ }
-      const terms=[];if(tl)for(const t of tl.kids){terms.push(t);const u=uidOf(t);if(u!==null)termOwner[u]=el;}
+      const terms=[];if(tl)for(const t of lvListObjs(tl)){terms.push(t);const u=uidOf(t);if(u!==null)zbyuid[u]=el;}
       const u=uidOf(el);if(u!==null)zbyuid[u]=el;
       zobjs.push({el,rect:r,terms});}
-    /* 收集每个对象被连线引用的端子方向 */
+    /* 收集每个对象被连线引用的端子方向(跨层级共享:结构内外连线互通) */
     const sl=lvKid(diag,'signalList');
-    const useOut={},useIn={};const sigList=[];
-    if(sl)for(const sg of sl.kids){
-      const tl=lvKid(sg,'termList');if(!tl||tl.kids.length<2)continue;
-      const tuids=tl.kids.map(t=>uidOf(t));
+    const sigList=[];
+    if(sl)for(const sg of lvListObjs(sl)){
+      const tl=lvKid(sg,'termList');if(!tl||lvListObjs(tl).length<2)continue;
+      const tuids=lvListObjs(tl).map(t=>uidOf(t));
       if(tuids.some(u=>u===null))continue;
       sigList.push(tuids);}
     for(const tuids of sigList){
       const fromU=tuids[0];
       (useOut[fromU]=useOut[fromU]||new Set());
       for(let j=1;j<tuids.length;j++)(useIn[tuids[j]]=useIn[tuids[j]]||new Set());}
-    /* 建节点 */
-    const nodeIdOf={};const termSlot={}; // uid → {out:i} 或 {in:i}
+    /* 建节点(termSlot/zbyuid/nodeIdOf 为共享) */
     for(const zo of zobjs){
       const el=zo.el,u=uidOf(el);
       const r=zo.rect;
@@ -1154,7 +1171,7 @@ function lvBuildFromVi(res){
       const text=lvTextOf(el);
       let kind,cat='fn',glyph=T2G[el.cls]||'▣';
       if(isLabel){cat='note';kind='note';glyph='';}
-      else if(el.cls==='forLoop'||el.cls==='whileLoop'||el.cls==='caseStructure'||el.cls==='flatSeq'||el.cls==='commentNode'||el.cls==='arrayCase'){glyph=T2G[el.cls]||'▦';}
+      else if(/^(forLoop|whileLoop|select|sequence|flatSequence|eventStruct|commentNode)$/.test(el.cls||'')){glyph=T2G[el.cls]||'▦';}
       if(isLabel){
         const w=Math.max(60,Math.min(320,(r[2]-r[0])*1.6)),h=Math.max(28,(r[3]-r[1])*1.15);
         const n={id:mkId(),kind:'note',label:(text||'标签').slice(0,40),x:baseX+r[0],y:baseY+r[1],w,h,props:{text:text||''}};
@@ -1190,6 +1207,12 @@ function lvBuildFromVi(res){
       nodes.push(n);
       const u=uidOf(el);if(u!==null)nodeIdOf[u]=n.id;
       return n;}
+    /* 先递归展开结构子图(让跨层级端子先进共享索引),再处理本级连线 */
+    if((depth||0)<6)for(const zo of zobjs){
+      const c=zo.el.cls||'';
+      if(/(Loop|Sequence|Struct)$|^select$/.test(c)){
+        const sub=zo.el.kids.find(k=>k.cls==='diag')||lvKid(zo.el,'diag')||lvKid(zo.el,'defaultDiag');
+        if(sub)buildDiag(sub,baseX,baseY,prefix+'.',(depth||0)+1);}}
     for(const tuids of sigList){
       let f=slotFor(tuids[0],'out');
       const rest=[];
@@ -1206,9 +1229,10 @@ function lvBuildFromVi(res){
       if(!f)continue;
       for(const t of rest)wires.push({id:mkId(),from:f.node.id,fromTerm:f.idx,to:t.node.id,toTerm:t.idx});}
     return {zbyuid,nodeIdOf};}
-  /* 顶层 diag */
+  /* 顶层 diag:带 zPlaneList 或 nodeList 任一即可 */
   let topDiag=null;
-  (function find(n){if(topDiag)return;if(n.cls==='diag'&&lvKid(n,'nodeList')!==undefined){topDiag=n;return;}
+  (function find(n){if(topDiag)return;
+    if(n.cls==='diag'&&(lvKid(n,'zPlaneList')||lvKid(n,'nodeList'))){topDiag=n;return;}
     for(const k of n.kids)find(k);})(bdRoot);
   if(!topDiag)return null;
   buildDiag(topDiag,0,0,'bd');
